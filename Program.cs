@@ -1,4 +1,5 @@
 using DataSourceFactory;
+using Types;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
@@ -6,57 +7,103 @@ var app = builder.Build();
 var connectionString = builder.Configuration["pgConnection"];
 await using var dataSource = DatabaseConnectionRepository.GetDataSource(builder);
 
-app.MapGet("/", () => "Hello World!");
+app.MapPost("/add-food", async (FoodItem foodItem) => {
+    string insertQuery = "INSERT INTO FoodItems (FoodType, Fat, Carbohydrates, Sugar, Cholesterol) VALUES (@FoodType, @Fat, @Carbohydrates, @Sugar, @Cholesterol)";
 
-// FoodItem foodItem
-app.MapPost("/add-food", async () => {
-    // Добавить проверку валидности входных данных
-
-    // Сохранить foodItem в базу данных
-    // Возвращать результат операции (успех или ошибка)
-
-    // Insert some data
-    await using (var cmd = dataSource.CreateCommand("INSERT INTO data (some_field) VALUES ($1)"))
+    await using (var cmd = dataSource.CreateCommand(insertQuery))
     {
-        cmd.Parameters.AddWithValue("Hello world");
+        cmd.Parameters.AddWithValue("@FoodType", foodItem.FoodType);
+        cmd.Parameters.AddWithValue("@Fat", foodItem.Fat);
+        cmd.Parameters.AddWithValue("@Carbohydrates", foodItem.Carbohydrates);
+        cmd.Parameters.AddWithValue("@Sugar", foodItem.Sugar);
+        cmd.Parameters.AddWithValue("@Cholesterol", foodItem.Cholesterol);
         await cmd.ExecuteNonQueryAsync();
     }
 
-    // Retrieve all rows
-    await using (var cmd = dataSource.CreateCommand("SELECT some_field FROM data"))
+    return Results.Ok("Food added");
+});
+
+app.MapGet("/get-food-items", async () => {
+    List<FoodItem> foodItems = [];
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodItems"))
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
         {
-            Console.WriteLine(reader.GetString(0));
+            foodItems.Add(new FoodItem
+            {
+                Id = reader.GetInt32(0),
+                Name = reader.IsDBNull(1) ? null : reader.GetString(1),
+                ImageUrl = reader.IsDBNull(2) ? null : reader.GetString(2),
+                FoodType = (FoodType)reader.GetInt32(3),
+                Fat = reader.GetDouble(4),
+                Carbohydrates = reader.GetDouble(5),
+                Sugar = reader.GetDouble(6),
+                Cholesterol = reader.GetDouble(7)
+            });
         }
     }
-    Results.Ok();
+    return Results.Ok(foodItems);
 });
 
-app.MapGet("/get-food-items", () => {
-    // Извлечь все продукты из базы данных
-    // Вернуть список продуктов
+app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
+    var cmd = dataSource.CreateCommand($"SELECT COUNT(*) FROM FoodItems WHERE Id = {id}");
+    var count = (long)await cmd.ExecuteScalarAsync();
+    if (count == 0)
+    {
+        return Results.NotFound($"Food item with id {id} not found");
+    }
+
+    cmd = dataSource.CreateCommand($@"
+        UPDATE FoodItems SET
+        Name = '{updatedFoodItem.Name}',
+        ImageUrl = '{updatedFoodItem.ImageUrl}',
+        FoodType = {(int)updatedFoodItem.FoodType},
+        Fat = {updatedFoodItem.Fat},
+        Carbohydrates = {updatedFoodItem.Carbohydrates},
+        Sugar = {updatedFoodItem.Sugar},
+        Cholesterol = {updatedFoodItem.Cholesterol}
+        WHERE Id = {id}
+    ");
+    await cmd.ExecuteNonQueryAsync();
+
+    return Results.Ok(updatedFoodItem);
 });
 
-// int id, FoodItem updatedFoodItem
-app.MapPut("/update-food/{id}", () => {
-    // Проверить, существует ли продукт с данным id
-    // Обновить информацию о продукте
-    // Вернуть обновленный продукт или сообщение об ошибке
+app.MapDelete("/delete-food/{id}", async (int id) => {
+    var cmd = dataSource.CreateCommand($"SELECT COUNT(*) FROM FoodItems WHERE Id = {id}");
+    var count = (long)await cmd.ExecuteScalarAsync();
+    if (count == 0)
+    {
+        return Results.NotFound($"Food item with id {id} not found");
+    }
+
+    cmd = dataSource.CreateCommand($"DELETE FROM FoodItems WHERE Id = {id}");
+    await cmd.ExecuteNonQueryAsync();
+
+    return Results.Ok($"Food item with id {id} has been deleted");
 });
 
-app.MapDelete("/delete-food/{id}", (int id) => {
-    // Проверить, существует ли продукт с данным id
-    // Удалить продукт из базы данных
-    // Вернуть результат операции (успех или ошибка)
-});
+app.MapGet("/calculate-rating/{id}", async (int id) => {
+    var cmd = dataSource.CreateCommand($"SELECT * FROM FoodItems WHERE Id = {id}");
+    await using (var reader = await cmd.ExecuteReaderAsync())
+    {
+        if (await reader.ReadAsync())
+        {
+            var fat = reader.GetDouble(4);
+            var carbohydrates = reader.GetDouble(5);
+            var sugar = reader.GetDouble(6);
+            var cholesterol = reader.GetDouble(7);
 
-app.MapGet("/calculate-rating/{id}", (int id) => {
-    // Найти продукт с данным id
-    // Вычислить рейтинг согласно формуле
-    // Ограничить рейтинг значениями от 0 до 100
-    // Вернуть рейтинг
+            var rating = (fat + carbohydrates + sugar + cholesterol) / 4;
+
+            rating = Math.Max(0, Math.Min(100, rating));
+
+            return Results.Ok(new { Rating = rating });
+        }
+    }
+
+    return Results.NotFound($"Food item with id {id} not found");
 });
 
 app.Run();

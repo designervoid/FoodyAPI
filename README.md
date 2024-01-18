@@ -16,6 +16,28 @@ POSTGRES_DB=db
 }
 ```
 
+Go to terminal:
+
+```
+psql -h <hostname> -p <port> -U <usr> -d <db>
+```
+
+Create Tables (because currently migrations not integrated):
+```sql
+CREATE TABLE FoodItems (
+    Id SERIAL PRIMARY KEY,
+    Name VARCHAR(255),
+    ImageUrl TEXT,
+    FoodType INT CHECK (FoodType IN (1, 2, 3)),
+    Fat DECIMAL(5,2) CHECK (Fat BETWEEN 0 AND 99),
+    Carbohydrates DECIMAL(5,2) CHECK (Carbohydrates BETWEEN 0 AND 99),
+    Sugar DECIMAL(5,2) CHECK (Sugar BETWEEN 0 AND 99),
+    Cholesterol DECIMAL(3,2) CHECK (Cholesterol BETWEEN 0 AND 1)
+);
+```
+
+Then can build!
+
 # Build
 
 ```sh
