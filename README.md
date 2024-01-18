@@ -36,6 +36,29 @@ CREATE TABLE FoodItems (
 );
 ```
 
+```sql
+CREATE TABLE FoodTypes (
+    Id SERIAL PRIMARY KEY,
+    Name VARCHAR(255) NOT NULL,
+    Description TEXT
+);
+```
+
+```sql
+ALTER TABLE FoodItems
+ADD CONSTRAINT fk_FoodItems_FoodType FOREIGN KEY (FoodType)
+REFERENCES FoodTypes (Id);
+```
+
+```sql
+INSERT INTO FoodTypes (Name, Description)
+VALUES
+    ('Energy-giving foods', 'These foods are high in carbohydrates and fats, which provide the body with energy. Examples of energy-giving foods include bread, rice, pasta, potatoes, fruits, vegetables, nuts, and seeds.'),
+    ('Body-building foods', 'These foods are high in protein, which is essential for building and repairing muscle tissue. Examples of body-building foods include meat, poultry, fish, eggs, dairy products, legumes, nuts, and seeds.'),
+    ('Protective foods', 'These foods are high in vitamins, minerals, and antioxidants, which help to protect the body from disease. Examples of protective foods include fruits, vegetables, and whole grains.');
+```
+
+
 Then can build!
 
 # Build

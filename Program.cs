@@ -12,7 +12,7 @@ app.MapPost("/add-food", async (FoodItem foodItem) => {
 
     await using (var cmd = dataSource.CreateCommand(insertQuery))
     {
-        cmd.Parameters.AddWithValue("@FoodType", foodItem.FoodType);
+        cmd.Parameters.AddWithValue("@FoodType", (int)foodItem.FoodType);
         cmd.Parameters.AddWithValue("@Fat", foodItem.Fat);
         cmd.Parameters.AddWithValue("@Carbohydrates", foodItem.Carbohydrates);
         cmd.Parameters.AddWithValue("@Sugar", foodItem.Sugar);
@@ -35,7 +35,7 @@ app.MapGet("/get-food-items", async () => {
                 Id = reader.GetInt32(0),
                 Name = reader.IsDBNull(1) ? null : reader.GetString(1),
                 ImageUrl = reader.IsDBNull(2) ? null : reader.GetString(2),
-                FoodType = (FoodType)reader.GetInt32(3),
+                FoodType = reader.GetInt32(3),
                 Fat = reader.GetDouble(4),
                 Carbohydrates = reader.GetDouble(5),
                 Sugar = reader.GetDouble(6),
@@ -45,6 +45,25 @@ app.MapGet("/get-food-items", async () => {
     }
     return Results.Ok(foodItems);
 });
+
+app.MapGet("/get-food-types", async () => {
+    List<FoodTypes> foodTypes = [];
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodTypes"))
+    await using (var reader = await cmd.ExecuteReaderAsync())
+    {
+        while (await reader.ReadAsync())
+        {
+            foodTypes.Add(new FoodTypes
+            {
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Description = reader.IsDBNull(2) ? null : reader.GetString(2)
+            });
+        }
+    }
+    return Results.Ok(foodTypes);
+});
+
 
 app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
     var cmd = dataSource.CreateCommand($"SELECT COUNT(*) FROM FoodItems WHERE Id = {id}");

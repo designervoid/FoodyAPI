@@ -4,7 +4,7 @@ namespace Types {
         public int Id { get; set; }
         public string? Name { get; set; }
         public string? ImageUrl { get; set; }
-        public FoodType FoodType { get; set; }
+        public int FoodType { get; set; }
         public double Fat { get; set; }
         public double Carbohydrates { get; set; }
         public double Sugar { get; set; }
@@ -12,16 +12,17 @@ namespace Types {
 
         public double CalculateScore()
         {
-            double score = ((int)FoodType * 40 * (Fat / 5)) + Carbohydrates - (Sugar / 2 * (double)FoodType) - Cholesterol * Carbohydrates / 10;
+            // Note: Update this calculation if needed, since FoodType is no longer an enum
+            double score = (FoodType * 40 * (Fat / 5)) + Carbohydrates - (Sugar / 2 * FoodType) - Cholesterol * Carbohydrates / 10;
             score = 100 - score;
             return Math.Max(0, Math.Min(score, 100));
         }
     }
 
-    public enum FoodType
+    public class FoodTypes
     {
-        Type1 = 1,
-        Type2 = 2,
-        Type3 = 3
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
     }
 }
