@@ -58,6 +58,22 @@ VALUES
     ('Protective foods', 'These foods are high in vitamins, minerals, and antioxidants, which help to protect the body from disease. Examples of protective foods include fruits, vegetables, and whole grains.');
 ```
 
+```sql
+UPDATE FoodTypes SET
+Name = 'Breakfast',
+Description = 'The first meal of the day, usually eaten in the morning. Typically includes a variety of foods such as eggs, bread, cereal, and sometimes fruits.'
+WHERE id = 1;
+
+UPDATE FoodTypes SET
+Name = 'Lunch',
+Description = 'A meal eaten in the middle of the day, typically one that is lighter or less formal than an evening meal.'
+WHERE id = 2;
+
+UPDATE FoodTypes SET
+Name = 'Dinner',
+Description = 'The main meal of the day, eaten either in the evening or at midday.'
+WHERE id = 3;
+```
 
 Then can build!
 
@@ -87,11 +103,12 @@ dotnet run
 
 # TODO
 
-1. docker-compose pgsql
-1. pgsql pool connection
-2. migrations
-4. openapi, swagger
-5. unit, int testing
+1. ~~docker-compose pgsql~~
+2. ~~pgsql pool connection~~ (by defaut thx dotnet framework)
+3. endpoints
+4. migrations
+5. openapi, swagger
+6. unit, int testing
 
 # FAQ
 
