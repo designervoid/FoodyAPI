@@ -83,6 +83,13 @@ CREATE TABLE MealItems (
 );
 ```
 
+```sql
+ALTER TABLE MealItems
+ADD COLUMN FoodTypeId INT,
+ADD CONSTRAINT fk_mealitems_foodtypeid FOREIGN KEY (FoodTypeId)
+REFERENCES FoodTypes (Id);
+```
+
 Then can build!
 
 # Build

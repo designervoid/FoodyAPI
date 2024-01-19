@@ -48,7 +48,7 @@ app.MapGet("/get-food-items", async () => {
 });
 
 app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
-    string insertQuery = "INSERT INTO MealItems (FoodItemIds, Reminder) VALUES (@FoodItemIds, @Reminder)";
+    string insertQuery = "INSERT INTO MealItems (FoodItemIds, Reminder, FoodTypeId) VALUES (@FoodItemIds, @Reminder, @FoodTypeId)";
 
     await using (var cmd = dataSource.CreateCommand(insertQuery))
     {
@@ -56,6 +56,8 @@ app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
         {
             Value = dto.FoodItemIds ?? Array.Empty<int>()
         });
+
+        cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId);
 
         DateTime? parsedReminder = null;
         if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
@@ -71,16 +73,37 @@ app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
 });
 
 app.MapGet("/get-meal-items", async () => {
-    List<MealItem> mealItems = [];
+    List<MealItem> mealItems = new List<MealItem>();
     await using (var cmd = dataSource.CreateCommand("SELECT * FROM MealItems"))
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
         {
-            var foodItemIds = reader.IsDBNull(1) ? [] : (int[])reader.GetValue(1);
-            List<FoodItem> foodItems = [];
+            var mealItem = new MealItem
+            {
+                Id = reader.GetInt32(0),
+                FoodItemIds = reader.IsDBNull(1) ? Array.Empty<int>() : (int[])reader.GetValue(1),
+                Reminder = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2),
+                FoodTypeId = reader.GetInt32(3),
+                FoodItems = new List<FoodItem>()
+            };
 
-            foreach (var foodItemId in foodItemIds)
+            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM FoodTypes WHERE Id = @FoodTypeId");
+            foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
+            await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
+            {
+                if (await foodTypeReader.ReadAsync())
+                {
+                    mealItem.FoodType = new FoodType
+                    {
+                        Id = mealItem.FoodTypeId,
+                        Name = foodTypeReader.GetString(0),
+                        Description = foodTypeReader.GetString(1)
+                    };
+                }
+            }
+
+            foreach (var foodItemId in mealItem.FoodItemIds)
             {
                 var foodItemCmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @FoodItemId");
                 foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
@@ -88,7 +111,7 @@ app.MapGet("/get-meal-items", async () => {
                 {
                     while (await foodItemReader.ReadAsync())
                     {
-                        foodItems.Add(new FoodItem
+                        mealItem.FoodItems.Add(new FoodItem
                         {
                             Id = foodItemReader.GetInt32(0),
                             Name = foodItemReader.IsDBNull(1) ? null : foodItemReader.GetString(1),
@@ -103,25 +126,23 @@ app.MapGet("/get-meal-items", async () => {
                 }
             }
 
-            mealItems.Add(new MealItem
-            {
-                Id = reader.GetInt32(0),
-                Reminder = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2),
-                FoodItems = foodItems
-            });
+            mealItems.Add(mealItem);
         }
     }
     return Results.Ok(mealItems);
 });
 
+
 app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItemDto dto) => {
-    string updateQuery = "UPDATE MealItems SET FoodItemIds = @FoodItemIds, Reminder = @Reminder WHERE Id = @Id";
+    string updateQuery = "UPDATE MealItems SET FoodItemIds = @FoodItemIds, Reminder = @Reminder, FoodTypeId = @FoodTypeId WHERE Id = @Id";
 
     await using (var cmd = dataSource.CreateCommand(updateQuery))
     {
         cmd.Parameters.Add(new NpgsqlParameter("FoodItemIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer) {
             Value = dto.FoodItemIds ?? Array.Empty<int>()
         });
+
+        cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId); // Handle the new FoodTypeId
 
         DateTime? parsedReminder = null;
         if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder)) {

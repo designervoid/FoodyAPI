@@ -25,11 +25,21 @@ namespace Types {
         public string Name { get; set; }
         public string Description { get; set; }
     }
+    
+    public class FoodType
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string Description { get; set; }
+    }
 
     public class MealItem
     {
         public int Id { get; set; }
+        public int[] FoodItemIds { get; set; }
         public DateTime? Reminder { get; set; }
+        public int FoodTypeId { get; set; }
+        public FoodType FoodType { get; set; }
         public List<FoodItem> FoodItems { get; set; }
     }
 
@@ -37,11 +47,14 @@ namespace Types {
     {
         public int[] FoodItemIds { get; set; }
         public string Reminder { get; set; }
+        public int FoodTypeId { get; set; }
     }
 
     public class UpdateMealItemDto
     {
         public int[] FoodItemIds { get; set; }
         public string Reminder { get; set; }
+
+        public int FoodTypeId { get; set; } 
     }
 }
