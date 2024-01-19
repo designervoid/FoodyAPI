@@ -75,6 +75,14 @@ Description = 'The main meal of the day, eaten either in the evening or at midda
 WHERE id = 3;
 ```
 
+```sql
+CREATE TABLE MealItems (
+    Id SERIAL PRIMARY KEY,
+    FoodItemIds INT[],
+    Reminder TIMESTAMP
+);
+```
+
 Then can build!
 
 # Build
