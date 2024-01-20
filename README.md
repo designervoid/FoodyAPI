@@ -120,7 +120,7 @@ dotnet run
 
 1. ~~docker-compose pgsql~~
 2. ~~pgsql pool connection~~ (by defaut thx dotnet framework)
-3. endpoints
+3. ~~endpoints~~
 4. migrations
 5. openapi, swagger
 6. unit, int testing
