@@ -143,3 +143,7 @@ dotnet run
 ## DotNet Add Package Command
 
 `dotnet add package`
+
+## Postman Docs
+
+[Link](https://documenter.getpostman.com/view/14601124/2s9YynjPNy)
