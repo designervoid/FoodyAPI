@@ -90,6 +90,11 @@ ADD CONSTRAINT fk_mealitems_foodtypeid FOREIGN KEY (FoodTypeId)
 REFERENCES FoodTypes (Id);
 ```
 
+```sql
+UPDATE FoodItems
+SET ImageUrl = 'https://2dxz44zd-5069.euw.devtunnels.ms/StaticFiles/images/melon.png';
+```
+
 Then can build!
 
 # Build

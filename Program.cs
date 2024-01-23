@@ -1,9 +1,24 @@
+using Microsoft.Extensions.FileProviders;
+
 using DataSourceFactory;
 using Npgsql;
 using Types;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
+
+var cacheMaxAgeOneWeek = (60 * 60 * 24 * 7).ToString();
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+           Path.Combine(builder.Environment.ContentRootPath, "StaticFiles")),
+    RequestPath = "/StaticFiles",
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.Append(
+             "Cache-Control", $"public, max-age={cacheMaxAgeOneWeek}");
+    }
+});
 
 var connectionString = builder.Configuration["pgConnection"];
 await using var dataSource = DatabaseConnectionRepository.GetDataSource(builder);
