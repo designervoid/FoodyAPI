@@ -316,39 +316,43 @@ app.MapGet("/get-food-types/{id}", async (int id) => {
 });
 
 app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
-    var cmd = dataSource.CreateCommand($"SELECT COUNT(*) FROM FoodItems WHERE Id = {id}");
-    var count = (long)await cmd.ExecuteScalarAsync();
-    if (count == 0)
-    {
-        return Results.NotFound($"Food item with id {id} not found");
-    }
-
-    cmd = dataSource.CreateCommand($@"
+    var updateQuery = @"
         UPDATE FoodItems SET
-        Name = '{updatedFoodItem.Name}',
-        ImageUrl = '{updatedFoodItem.ImageUrl}',
-        FoodType = {(int)updatedFoodItem.FoodType},
-        Fat = {updatedFoodItem.Fat},
-        Carbohydrates = {updatedFoodItem.Carbohydrates},
-        Sugar = {updatedFoodItem.Sugar},
-        Cholesterol = {updatedFoodItem.Cholesterol}
-        WHERE Id = {id}
-    ");
-    await cmd.ExecuteNonQueryAsync();
+        Name = @Name,
+        ImageUrl = @ImageUrl,
+        FoodType = @FoodType,
+        Fat = @Fat,
+        Carbohydrates = @Carbohydrates,
+        Sugar = @Sugar,
+        Cholesterol = @Cholesterol
+        WHERE Id = @Id";
+
+    await using var cmd = dataSource.CreateCommand(updateQuery);
+    cmd.Parameters.AddWithValue("@Name", updatedFoodItem.Name);
+    cmd.Parameters.AddWithValue("@ImageUrl", updatedFoodItem.ImageUrl);
+    cmd.Parameters.AddWithValue("@FoodType", (int)updatedFoodItem.FoodType);
+    cmd.Parameters.AddWithValue("@Fat", updatedFoodItem.Fat);
+    cmd.Parameters.AddWithValue("@Carbohydrates", updatedFoodItem.Carbohydrates);
+    cmd.Parameters.AddWithValue("@Sugar", updatedFoodItem.Sugar);
+    cmd.Parameters.AddWithValue("@Cholesterol", updatedFoodItem.Cholesterol);
+    cmd.Parameters.AddWithValue("@Id", id);
+
+    var result = await cmd.ExecuteNonQueryAsync();
+    if (result == 0)
+        return Results.NotFound($"Food item with id {id} not found");
 
     return Results.Ok(updatedFoodItem);
 });
 
 app.MapDelete("/delete-food/{id}", async (int id) => {
-    var cmd = dataSource.CreateCommand($"SELECT COUNT(*) FROM FoodItems WHERE Id = {id}");
-    var count = (long)await cmd.ExecuteScalarAsync();
-    if (count == 0)
-    {
-        return Results.NotFound($"Food item with id {id} not found");
-    }
+    var deleteQuery = "DELETE FROM FoodItems WHERE Id = @Id";
 
-    cmd = dataSource.CreateCommand($"DELETE FROM FoodItems WHERE Id = {id}");
-    await cmd.ExecuteNonQueryAsync();
+    await using var cmd = dataSource.CreateCommand(deleteQuery);
+    cmd.Parameters.AddWithValue("@Id", id);
+    var result = await cmd.ExecuteNonQueryAsync();
+
+    if (result == 0)
+        return Results.NotFound($"Food item with id {id} not found");
 
     return Results.Ok($"Food item with id {id} has been deleted");
 });
