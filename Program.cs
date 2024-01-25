@@ -2,9 +2,17 @@ using Microsoft.Extensions.FileProviders;
 
 using DataSourceFactory;
 using Npgsql;
-using Types;
+using Models;
+using Entity.AppDbContext;
+using Microsoft.EntityFrameworkCore;
+using DTO;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var Configuration = builder.Configuration;
+builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(Configuration["pgConnection"]));
+
 var app = builder.Build();
 
 var cacheMaxAgeOneWeek = (60 * 60 * 24 * 7).ToString();
@@ -24,7 +32,7 @@ var connectionString = builder.Configuration["pgConnection"];
 await using var dataSource = DatabaseConnectionRepository.GetDataSource(builder);
 
 app.MapPost("/add-food", async (FoodItem foodItem) => {
-    string insertQuery = "INSERT INTO FoodItems (Name, ImageUrl, FoodType, Fat, Carbohydrates, Sugar, Cholesterol) VALUES (@Name, @ImageUrl, @FoodType, @Fat, @Carbohydrates, @Sugar, @Cholesterol)";
+    string insertQuery = "INSERT INTO public.\"FoodItems\" (\"Name\", \"ImageUrl\", \"FoodType\", \"Fat\", \"Carbohydrates\", \"Sugar\", \"Cholesterol\") VALUES (@Name, @ImageUrl, @FoodType, @Fat, @Carbohydrates, @Sugar, @Cholesterol)";
 
     await using (var cmd = dataSource.CreateCommand(insertQuery))
     {
@@ -43,7 +51,7 @@ app.MapPost("/add-food", async (FoodItem foodItem) => {
 
 app.MapGet("/get-food-items", async () => {
     List<FoodItem> foodItems = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodItems"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\""))
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
@@ -64,8 +72,8 @@ app.MapGet("/get-food-items", async () => {
     return Results.Ok(foodItems);
 });
 
-app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
-    string insertQuery = "INSERT INTO MealItems (FoodItemIds, Reminder, FoodTypeId) VALUES (@FoodItemIds, @Reminder, @FoodTypeId)";
+app.MapPost("/add-meal-item", async (CreateMealItem dto) => {
+    string insertQuery = "INSERT INTO public.\"MealItems\" (\"FoodItemIds\", \"Reminder\", \"FoodTypeId\") VALUES (@FoodItemIds, @Reminder, @FoodTypeId)";
 
     await using (var cmd = dataSource.CreateCommand(insertQuery))
     {
@@ -91,7 +99,7 @@ app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
 
 app.MapGet("/get-meal-items", async () => {
     List<MealItem> mealItems = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM MealItems"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"MealItems\""))
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
@@ -105,7 +113,7 @@ app.MapGet("/get-meal-items", async () => {
                 FoodItems = []
             };
 
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM FoodTypes WHERE Id = @FoodTypeId");
+            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM public.\"FoodTypes\" WHERE Id = @FoodTypeId");
             foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
             await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
             {
@@ -122,7 +130,7 @@ app.MapGet("/get-meal-items", async () => {
 
             foreach (var foodItemId in mealItem.FoodItemIds)
             {
-                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @FoodItemId");
+                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE Id = @FoodItemId");
                 foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
                 await using var foodItemReader = await foodItemCmd.ExecuteReaderAsync();
                 while (await foodItemReader.ReadAsync())
@@ -149,7 +157,7 @@ app.MapGet("/get-meal-items", async () => {
 
 app.MapGet("/get-meal-item/{id}", async (int id) => {
     MealItem? mealItem = null;
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM MealItems WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"MealItems\" WHERE Id = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
         await using var reader = await cmd.ExecuteReaderAsync();
@@ -164,7 +172,7 @@ app.MapGet("/get-meal-item/{id}", async (int id) => {
                 FoodItems = []
             };
 
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM FoodTypes WHERE Id = @FoodTypeId");
+            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM public.\"FoodTypes\" WHERE Id = @FoodTypeId");
             foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
             await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
             {
@@ -181,7 +189,7 @@ app.MapGet("/get-meal-item/{id}", async (int id) => {
 
             foreach (var foodItemId in mealItem.FoodItemIds)
             {
-                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @FoodItemId");
+                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE Id = @FoodItemId");
                 foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
                 await using var foodItemReader = await foodItemCmd.ExecuteReaderAsync();
                 while (await foodItemReader.ReadAsync())
@@ -212,8 +220,8 @@ app.MapGet("/get-meal-item/{id}", async (int id) => {
     }
 });
 
-app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItemDto dto) => {
-    string updateQuery = "UPDATE MealItems SET FoodItemIds = @FoodItemIds, Reminder = @Reminder, FoodTypeId = @FoodTypeId WHERE Id = @Id";
+app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto) => {
+    string updateQuery = "UPDATE public.\"MealItems\" SET FoodItemIds = @FoodItemIds, Reminder = @Reminder, FoodTypeId = @FoodTypeId WHERE Id = @Id";
 
     await using var cmd = dataSource.CreateCommand(updateQuery);
     cmd.Parameters.Add(new NpgsqlParameter("FoodItemIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
@@ -221,7 +229,7 @@ app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItemDto dto) => {
         Value = dto.FoodItemIds ?? Array.Empty<int>()
     });
 
-    cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId); // Handle the new FoodTypeId
+    cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId);
 
     DateTime? parsedReminder = null;
     if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
@@ -240,7 +248,7 @@ app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItemDto dto) => {
 });
 
 app.MapDelete("/delete-meal-item/{id}", async (int id) => {
-    string deleteQuery = "DELETE FROM MealItems WHERE Id = @Id";
+    string deleteQuery = "DELETE FROM public.\"MealItems\" WHERE Id = @Id";
 
     await using var cmd = dataSource.CreateCommand(deleteQuery);
     cmd.Parameters.AddWithValue("@Id", id);
@@ -253,7 +261,7 @@ app.MapDelete("/delete-meal-item/{id}", async (int id) => {
 });
 
 app.MapGet("/get-food-items/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE Id = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
 
@@ -278,13 +286,13 @@ app.MapGet("/get-food-items/{id}", async (int id) => {
 });
 
 app.MapGet("/get-food-types", async () => {
-    List<FoodTypes> foodTypes = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodTypes"))
+    List<FoodType> foodTypes = [];
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodTypes\""))
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
         {
-            foodTypes.Add(new FoodTypes
+            foodTypes.Add(new FoodType
             {
                 Id = reader.GetInt32(0),
                 Name = reader.GetString(1),
@@ -296,14 +304,14 @@ app.MapGet("/get-food-types", async () => {
 });
 
 app.MapGet("/get-food-types/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodTypes WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodTypes\" WHERE Id = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
 
         await using var reader = await cmd.ExecuteReaderAsync();
         if (await reader.ReadAsync())
         {
-            var foodItem = new FoodTypes
+            var foodItem = new FoodType
             {
                 Id = reader.GetInt32(0),
                 Name = reader.GetString(1),
@@ -317,15 +325,15 @@ app.MapGet("/get-food-types/{id}", async (int id) => {
 
 app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
     var updateQuery = @"
-        UPDATE FoodItems SET
-        Name = @Name,
-        ImageUrl = @ImageUrl,
-        FoodType = @FoodType,
-        Fat = @Fat,
-        Carbohydrates = @Carbohydrates,
-        Sugar = @Sugar,
-        Cholesterol = @Cholesterol
-        WHERE Id = @Id";
+    UPDATE public.""MealItems"" SET
+    Name = @Name,
+    ImageUrl = @ImageUrl,
+    FoodType = @FoodType,
+    Fat = @Fat,
+    Carbohydrates = @Carbohydrates,
+    Sugar = @Sugar,
+    Cholesterol = @Cholesterol
+    WHERE Id = @Id";
 
     await using var cmd = dataSource.CreateCommand(updateQuery);
     cmd.Parameters.AddWithValue("@Name", updatedFoodItem.Name);
@@ -345,7 +353,7 @@ app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
 });
 
 app.MapDelete("/delete-food/{id}", async (int id) => {
-    var deleteQuery = "DELETE FROM FoodItems WHERE Id = @Id";
+    var deleteQuery = "DELETE FROM public.\"FoodItems\" WHERE Id = @Id";
 
     await using var cmd = dataSource.CreateCommand(deleteQuery);
     cmd.Parameters.AddWithValue("@Id", id);
@@ -358,7 +366,7 @@ app.MapDelete("/delete-food/{id}", async (int id) => {
 });
 
 app.MapGet("/calculate-rating/{id}", async (int id) => {
-    var cmd = dataSource.CreateCommand($"SELECT * FROM FoodItems WHERE Id = {id}");
+    var cmd = dataSource.CreateCommand($"SELECT * FROM public.\"FoodItems\" WHERE Id = {id}");
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         if (await reader.ReadAsync())
