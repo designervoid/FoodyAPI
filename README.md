@@ -24,16 +24,18 @@ Go to terminal and run migrations:
 2. Set data
 
 ```sql
-INSERT INTO FoodTypes (Name, Description)
-VALUES
-    ('Breakfast', 'The first meal of the day, usually eaten in the morning. Typically includes a variety of foods such as eggs, bread, cereal, and sometimes fruits.'),
+INSERT INTO public."FoodTypes"(
+	"Name", "Description")
+	VALUES ('Breakfast', 'The first meal of the day, usually eaten in the morning. Typically includes a variety of foods such as eggs, bread, cereal, and sometimes fruits.'),
     ('Lunch', 'A meal eaten in the middle of the day, typically one that is lighter or less formal than an evening meal.'),
-    ('Dinner', 'The main meal of the day, eaten either in the evening or at midday.');
-```
+    ('Dinner', 'The main meal of the day, eaten either in the evening or at midday.')
 
-```sql
-UPDATE FoodItems
-SET ImageUrl = 'https://2dxz44zd-5069.euw.devtunnels.ms/StaticFiles/images/melon.png';
+INSERT INTO public."FoodItems"(
+	"Name", "ImageUrl", "FoodType", "Fat", "Carbohydrates", "Sugar", "Cholesterol")
+	VALUES 'Random Food2', 'http://example.com/image.jpg', 1, 20.5, 50.2, 10.5, 0.5
+
+UPDATE public."FoodItems"
+SET "ImageUrl" = 'https://2dxz44zd-5069.euw.devtunnels.ms/StaticFiles/images/melon.png'
 ```
 
 Then can build!
@@ -67,7 +69,7 @@ dotnet run
 1. ~~docker-compose pgsql~~
 2. ~~pgsql pool connection~~ (by defaut thx dotnet framework)
 3. ~~endpoints~~
-4. migrations
+4. ~~migrations~~
 5. openapi, swagger
 6. unit, int testing
 

@@ -99,7 +99,8 @@ app.MapPost("/add-meal-item", async (CreateMealItem dto) => {
 
 app.MapGet("/get-meal-items", async () => {
     List<MealItem> mealItems = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"MealItems\""))
+    var cmd = dataSource.CreateCommand("SELECT \"Id\", \"FoodItemIds\", \"Reminder\", \"FoodTypeId\" FROM public.\"MealItems\"");
+
     await using (var reader = await cmd.ExecuteReaderAsync())
     {
         while (await reader.ReadAsync())
@@ -110,10 +111,11 @@ app.MapGet("/get-meal-items", async () => {
                 FoodItemIds = reader.IsDBNull(1) ? Array.Empty<int>() : (int[])reader.GetValue(1),
                 Reminder = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2),
                 FoodTypeId = reader.GetInt32(3),
-                FoodItems = []
+                FoodItems = new List<FoodItem>()
             };
 
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM public.\"FoodTypes\" WHERE Id = @FoodTypeId");
+            var foodTypeCmd = dataSource.CreateCommand("SELECT \"Name\", \"Description\" FROM public.\"FoodTypes\" WHERE \"Id\" = @FoodTypeId");
+
             foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
             await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
             {
@@ -130,7 +132,7 @@ app.MapGet("/get-meal-items", async () => {
 
             foreach (var foodItemId in mealItem.FoodItemIds)
             {
-                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE Id = @FoodItemId");
+                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE \"Id\" = @FoodItemId");
                 foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
                 await using var foodItemReader = await foodItemCmd.ExecuteReaderAsync();
                 while (await foodItemReader.ReadAsync())
@@ -157,7 +159,7 @@ app.MapGet("/get-meal-items", async () => {
 
 app.MapGet("/get-meal-item/{id}", async (int id) => {
     MealItem? mealItem = null;
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"MealItems\" WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"MealItems\" WHERE \"Id\" = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
         await using var reader = await cmd.ExecuteReaderAsync();
