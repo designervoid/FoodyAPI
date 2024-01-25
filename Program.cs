@@ -174,7 +174,7 @@ app.MapGet("/get-meal-item/{id}", async (int id) => {
                 FoodItems = []
             };
 
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM public.\"FoodTypes\" WHERE Id = @FoodTypeId");
+            var foodTypeCmd = dataSource.CreateCommand("SELECT \"Name\", \"Description\" FROM public.\"FoodTypes\" WHERE Id = @FoodTypeId");
             foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
             await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
             {
@@ -223,7 +223,7 @@ app.MapGet("/get-meal-item/{id}", async (int id) => {
 });
 
 app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto) => {
-    string updateQuery = "UPDATE public.\"MealItems\" SET FoodItemIds = @FoodItemIds, Reminder = @Reminder, FoodTypeId = @FoodTypeId WHERE Id = @Id";
+    string updateQuery = "UPDATE public.\"MealItems\" SET \"FoodItemIds\" = @FoodItemIds, \"Reminder\" = @Reminder, \"FoodTypeId\" = @FoodTypeId WHERE \"Id\" = @Id";
 
     await using var cmd = dataSource.CreateCommand(updateQuery);
     cmd.Parameters.Add(new NpgsqlParameter("FoodItemIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
@@ -250,7 +250,7 @@ app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto) => {
 });
 
 app.MapDelete("/delete-meal-item/{id}", async (int id) => {
-    string deleteQuery = "DELETE FROM public.\"MealItems\" WHERE Id = @Id";
+    string deleteQuery = "DELETE FROM public.\"MealItems\" WHERE \"Id\" = @Id";
 
     await using var cmd = dataSource.CreateCommand(deleteQuery);
     cmd.Parameters.AddWithValue("@Id", id);
@@ -263,7 +263,7 @@ app.MapDelete("/delete-meal-item/{id}", async (int id) => {
 });
 
 app.MapGet("/get-food-items/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodItems\" WHERE \"Id\" = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
 
@@ -306,7 +306,7 @@ app.MapGet("/get-food-types", async () => {
 });
 
 app.MapGet("/get-food-types/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodTypes\" WHERE Id = @Id"))
+    await using (var cmd = dataSource.CreateCommand("SELECT * FROM public.\"FoodTypes\" WHERE \"Id\" = @Id"))
     {
         cmd.Parameters.AddWithValue("@Id", id);
 
@@ -328,14 +328,14 @@ app.MapGet("/get-food-types/{id}", async (int id) => {
 app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
     var updateQuery = @"
     UPDATE public.""MealItems"" SET
-    Name = @Name,
-    ImageUrl = @ImageUrl,
-    FoodType = @FoodType,
-    Fat = @Fat,
-    Carbohydrates = @Carbohydrates,
-    Sugar = @Sugar,
-    Cholesterol = @Cholesterol
-    WHERE Id = @Id";
+    ""Name"" = @Name,
+    ""ImageUrl"" = @ImageUrl,
+    ""FoodType"" = @FoodType,
+    ""Fat"" = @Fat,
+    ""Carbohydrates"" = @Carbohydrates,
+    ""Sugar"" = @Sugar,
+    ""Cholesterol"" = @Cholesterol
+    WHERE ""Id"" = @Id";
 
     await using var cmd = dataSource.CreateCommand(updateQuery);
     cmd.Parameters.AddWithValue("@Name", updatedFoodItem.Name);
@@ -355,7 +355,7 @@ app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
 });
 
 app.MapDelete("/delete-food/{id}", async (int id) => {
-    var deleteQuery = "DELETE FROM public.\"FoodItems\" WHERE Id = @Id";
+    var deleteQuery = "DELETE FROM public.\"FoodItems\" WHERE \"Id\" = @Id";
 
     await using var cmd = dataSource.CreateCommand(deleteQuery);
     cmd.Parameters.AddWithValue("@Id", id);
