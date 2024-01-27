@@ -46,11 +46,7 @@ app.MapGet("/get-food-items", async (AppDbContext context) =>
 
 app.MapPost("/add-meal-item", async (CreateMealItem dto, AppDbContext context) =>
 {
-    DateTime? parsedReminder = null;
-    if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
-    {
-        parsedReminder = reminder;
-    };
+    DateTime? parsedReminder = DateTimeOffset.FromUnixTimeMilliseconds(dto.Reminder).UtcDateTime;
 
     var mealItem = new MealItem
     {
@@ -67,17 +63,29 @@ app.MapPost("/add-meal-item", async (CreateMealItem dto, AppDbContext context) =
 
 app.MapGet("/get-meal-items", async (AppDbContext context) =>
 {
-    var mealItems = await context.MealItems.Include(m => m.FoodItems).ToListAsync();
+    var mealItems = await context.MealItems.Include(m => m.FoodItems).Include(m => m.FoodType).ToListAsync();
+
+    foreach (var mealItem in mealItems)
+    {
+        mealItem.FoodItems = await context.FoodItems.Where(f => mealItem.FoodItemIds.Contains(f.Id)).ToListAsync();
+    }
+
     return Results.Ok(mealItems);
 });
 
 app.MapGet("/get-meal-item/{id}", async (int id, AppDbContext context) =>
 {
-    var mealItem = await context.MealItems.Include(m => m.FoodItems).FirstOrDefaultAsync(m => m.Id == id);
+    var mealItem = await context.MealItems.Include(m => m.FoodItems).Include(m => m.FoodType).FirstOrDefaultAsync(m => m.Id == id);
     if (mealItem == null) return Results.NotFound($"Meal item with id {id} not found");
+
+    if (mealItem.FoodItems == null || !mealItem.FoodItems.Any())
+    {
+        mealItem.FoodItems = await context.FoodItems.Where(f => mealItem.FoodItemIds.Contains(f.Id)).ToListAsync();
+    }
 
     return Results.Ok(mealItem);
 });
+
 
 app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto, AppDbContext context) =>
 {
@@ -88,9 +96,9 @@ app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto, AppDbConte
     mealItem.FoodItemIds = dto.FoodItemIds;
     mealItem.FoodTypeId = dto.FoodTypeId;
 
-    if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
+    if (dto.Reminder != null)
     {
-        mealItem.Reminder = reminder;
+        mealItem.Reminder = DateTimeOffset.FromUnixTimeMilliseconds(dto.Reminder).UtcDateTime;
     }
     else
     {
@@ -100,6 +108,7 @@ app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto, AppDbConte
     await context.SaveChangesAsync();
     return Results.Ok("Meal item updated");
 });
+
 
 
 app.MapDelete("/delete-meal-item/{id}", async (int id, AppDbContext context) =>

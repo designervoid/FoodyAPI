@@ -30,9 +30,7 @@ INSERT INTO public."FoodTypes"(
     ('Lunch', 'A meal eaten in the middle of the day, typically one that is lighter or less formal than an evening meal.'),
     ('Dinner', 'The main meal of the day, eaten either in the evening or at midday.')
 
-INSERT INTO public."FoodItems"(
-	"Name", "ImageUrl", "FoodType", "Fat", "Carbohydrates", "Sugar", "Cholesterol")
-	VALUES 'Random Food2', 'http://example.com/image.jpg', 1, 20.5, 50.2, 10.5, 0.5
+INSERT INTO public."FoodItems"("Name", "ImageUrl", "FoodType", "Fat", "Carbohydrates", "Sugar", "Cholesterol") VALUES ('Random Food2', 'http://example.com/image.jpg', 1, 20.5, 50.2, 10.5, 0.5)
 
 UPDATE public."FoodItems"
 SET "ImageUrl" = 'https://2dxz44zd-5069.euw.devtunnels.ms/StaticFiles/images/melon.png'
