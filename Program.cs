@@ -1,17 +1,25 @@
 using Microsoft.Extensions.FileProviders;
 
 using DataSourceFactory;
-using Npgsql;
-using Types;
+using Models;
+using Entity.AppDbContext;
+using Microsoft.EntityFrameworkCore;
+using DTO;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var Configuration = builder.Configuration;
+
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(Configuration["pgConnection"]));
+
 var app = builder.Build();
 
 var cacheMaxAgeOneWeek = (60 * 60 * 24 * 7).ToString();
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(
-           Path.Combine(builder.Environment.ContentRootPath, "StaticFiles")),
+        Path.Combine(builder.Environment.ContentRootPath, "StaticFiles")
+    ),
     RequestPath = "/StaticFiles",
     OnPrepareResponse = ctx =>
     {
@@ -23,360 +31,160 @@ app.UseStaticFiles(new StaticFileOptions
 var connectionString = builder.Configuration["pgConnection"];
 await using var dataSource = DatabaseConnectionRepository.GetDataSource(builder);
 
-app.MapPost("/add-food", async (FoodItem foodItem) => {
-    string insertQuery = "INSERT INTO FoodItems (Name, ImageUrl, FoodType, Fat, Carbohydrates, Sugar, Cholesterol) VALUES (@Name, @ImageUrl, @FoodType, @Fat, @Carbohydrates, @Sugar, @Cholesterol)";
-
-    await using (var cmd = dataSource.CreateCommand(insertQuery))
-    {
-        cmd.Parameters.AddWithValue("@Name", foodItem.Name ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@ImageUrl", foodItem.ImageUrl ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@FoodType", (int)foodItem.FoodType);
-        cmd.Parameters.AddWithValue("@Fat", foodItem.Fat);
-        cmd.Parameters.AddWithValue("@Carbohydrates", foodItem.Carbohydrates);
-        cmd.Parameters.AddWithValue("@Sugar", foodItem.Sugar);
-        cmd.Parameters.AddWithValue("@Cholesterol", foodItem.Cholesterol);
-        await cmd.ExecuteNonQueryAsync();
-    }
-
+app.MapPost("/add-food", async (FoodItem foodItem, AppDbContext context) =>
+{
+    context.FoodItems.Add(foodItem);
+    await context.SaveChangesAsync();
     return Results.Ok("Food added");
 });
 
-app.MapGet("/get-food-items", async () => {
-    List<FoodItem> foodItems = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodItems"))
-    await using (var reader = await cmd.ExecuteReaderAsync())
-    {
-        while (await reader.ReadAsync())
-        {
-            foodItems.Add(new FoodItem
-            {
-                Id = reader.GetInt32(0),
-                Name = reader.IsDBNull(1) ? null : reader.GetString(1),
-                ImageUrl = reader.IsDBNull(2) ? null : reader.GetString(2),
-                FoodType = reader.GetInt32(3),
-                Fat = reader.GetDouble(4),
-                Carbohydrates = reader.GetDouble(5),
-                Sugar = reader.GetDouble(6),
-                Cholesterol = reader.GetDouble(7)
-            });
-        }
-    }
+app.MapGet("/get-food-items", async (AppDbContext context) =>
+{
+    var foodItems = await context.FoodItems.ToListAsync();
     return Results.Ok(foodItems);
 });
 
-app.MapPost("/add-meal-item", async (CreateMealItemDto dto) => {
-    string insertQuery = "INSERT INTO MealItems (FoodItemIds, Reminder, FoodTypeId) VALUES (@FoodItemIds, @Reminder, @FoodTypeId)";
+app.MapPost("/add-meal-item", async (CreateMealItem dto, AppDbContext context) =>
+{
+    DateTime? parsedReminder = DateTimeOffset.FromUnixTimeMilliseconds(dto.Reminder).UtcDateTime;
 
-    await using (var cmd = dataSource.CreateCommand(insertQuery))
+    var mealItem = new MealItem
     {
-        cmd.Parameters.Add(new NpgsqlParameter("FoodItemIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
-        {
-            Value = dto.FoodItemIds ?? Array.Empty<int>()
-        });
+        FoodItemIds = dto.FoodItemIds ?? Array.Empty<int>(),
+        Reminder = parsedReminder,
+        FoodTypeId = dto.FoodTypeId
+    };
 
-        cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId);
-
-        DateTime? parsedReminder = null;
-        if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
-        {
-            parsedReminder = reminder;
-        }
-
-        cmd.Parameters.AddWithValue("@Reminder", parsedReminder.HasValue ? (object)parsedReminder.Value : DBNull.Value);
-        await cmd.ExecuteNonQueryAsync();
-    }
+    context.MealItems.Add(mealItem);
+    await context.SaveChangesAsync();
 
     return Results.Ok("Meal item created");
 });
 
-app.MapGet("/get-meal-items", async () => {
-    List<MealItem> mealItems = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM MealItems"))
-    await using (var reader = await cmd.ExecuteReaderAsync())
+app.MapGet("/get-meal-items", async (AppDbContext context) =>
+{
+    var mealItems = await context.MealItems.Include(m => m.FoodItems).Include(m => m.FoodType).ToListAsync();
+
+    foreach (var mealItem in mealItems)
     {
-        while (await reader.ReadAsync())
-        {
-            var mealItem = new MealItem
-            {
-                Id = reader.GetInt32(0),
-                FoodItemIds = reader.IsDBNull(1) ? Array.Empty<int>() : (int[])reader.GetValue(1),
-                Reminder = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2),
-                FoodTypeId = reader.GetInt32(3),
-                FoodItems = []
-            };
-
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM FoodTypes WHERE Id = @FoodTypeId");
-            foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
-            await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
-            {
-                if (await foodTypeReader.ReadAsync())
-                {
-                    mealItem.FoodType = new FoodType
-                    {
-                        Id = mealItem.FoodTypeId,
-                        Name = foodTypeReader.GetString(0),
-                        Description = foodTypeReader.GetString(1)
-                    };
-                }
-            }
-
-            foreach (var foodItemId in mealItem.FoodItemIds)
-            {
-                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @FoodItemId");
-                foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
-                await using var foodItemReader = await foodItemCmd.ExecuteReaderAsync();
-                while (await foodItemReader.ReadAsync())
-                {
-                    mealItem.FoodItems.Add(new FoodItem
-                    {
-                        Id = foodItemReader.GetInt32(0),
-                        Name = foodItemReader.IsDBNull(1) ? null : foodItemReader.GetString(1),
-                        ImageUrl = foodItemReader.IsDBNull(2) ? null : foodItemReader.GetString(2),
-                        FoodType = foodItemReader.GetInt32(3),
-                        Fat = foodItemReader.GetDouble(4),
-                        Carbohydrates = foodItemReader.GetDouble(5),
-                        Sugar = foodItemReader.GetDouble(6),
-                        Cholesterol = foodItemReader.GetDouble(7)
-                    });
-                }
-            }
-
-            mealItems.Add(mealItem);
-        }
+        mealItem.FoodItems = await context.FoodItems.Where(f => mealItem.FoodItemIds.Contains(f.Id)).ToListAsync();
     }
+
     return Results.Ok(mealItems);
 });
 
-app.MapGet("/get-meal-item/{id}", async (int id) => {
-    MealItem? mealItem = null;
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM MealItems WHERE Id = @Id"))
+app.MapGet("/get-meal-item/{id}", async (int id, AppDbContext context) =>
+{
+    var mealItem = await context.MealItems.Include(m => m.FoodItems).Include(m => m.FoodType).FirstOrDefaultAsync(m => m.Id == id);
+    if (mealItem == null) return Results.NotFound($"Meal item with id {id} not found");
+
+    if (mealItem.FoodItems == null || !mealItem.FoodItems.Any())
     {
-        cmd.Parameters.AddWithValue("@Id", id);
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            mealItem = new MealItem
-            {
-                Id = reader.GetInt32(0),
-                FoodItemIds = reader.IsDBNull(1) ? Array.Empty<int>() : (int[])reader.GetValue(1),
-                Reminder = reader.IsDBNull(2) ? (DateTime?)null : reader.GetDateTime(2),
-                FoodTypeId = reader.GetInt32(3),
-                FoodItems = []
-            };
-
-            var foodTypeCmd = dataSource.CreateCommand("SELECT Name, Description FROM FoodTypes WHERE Id = @FoodTypeId");
-            foodTypeCmd.Parameters.AddWithValue("@FoodTypeId", mealItem.FoodTypeId);
-            await using (var foodTypeReader = await foodTypeCmd.ExecuteReaderAsync())
-            {
-                if (await foodTypeReader.ReadAsync())
-                {
-                    mealItem.FoodType = new FoodType
-                    {
-                        Id = mealItem.FoodTypeId,
-                        Name = foodTypeReader.GetString(0),
-                        Description = foodTypeReader.GetString(1)
-                    };
-                }
-            }
-
-            foreach (var foodItemId in mealItem.FoodItemIds)
-            {
-                var foodItemCmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @FoodItemId");
-                foodItemCmd.Parameters.AddWithValue("@FoodItemId", foodItemId);
-                await using var foodItemReader = await foodItemCmd.ExecuteReaderAsync();
-                while (await foodItemReader.ReadAsync())
-                {
-                    mealItem.FoodItems.Add(new FoodItem
-                    {
-                        Id = foodItemReader.GetInt32(0),
-                        Name = foodItemReader.IsDBNull(1) ? null : foodItemReader.GetString(1),
-                        ImageUrl = foodItemReader.IsDBNull(2) ? null : foodItemReader.GetString(2),
-                        FoodType = foodItemReader.GetInt32(3),
-                        Fat = foodItemReader.GetDouble(4),
-                        Carbohydrates = foodItemReader.GetDouble(5),
-                        Sugar = foodItemReader.GetDouble(6),
-                        Cholesterol = foodItemReader.GetDouble(7)
-                    });
-                }
-            }
-        }
+        mealItem.FoodItems = await context.FoodItems.Where(f => mealItem.FoodItemIds.Contains(f.Id)).ToListAsync();
     }
 
-    if (mealItem != null)
+    return Results.Ok(mealItem);
+});
+
+
+app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItem dto, AppDbContext context) =>
+{
+    var mealItem = await context.MealItems.FindAsync(id);
+    if (mealItem == null)
+        return Results.NotFound($"Meal item with id {id} not found");
+
+    mealItem.FoodItemIds = dto.FoodItemIds;
+    mealItem.FoodTypeId = dto.FoodTypeId;
+
+    if (dto.Reminder != null)
     {
-        return Results.Ok(mealItem);
+        mealItem.Reminder = DateTimeOffset.FromUnixTimeMilliseconds(dto.Reminder).UtcDateTime;
     }
     else
     {
-        return Results.NotFound($"Meal item with id {id} not found");
-    }
-});
-
-app.MapPut("/edit-meal-item/{id}", async (int id, UpdateMealItemDto dto) => {
-    string updateQuery = "UPDATE MealItems SET FoodItemIds = @FoodItemIds, Reminder = @Reminder, FoodTypeId = @FoodTypeId WHERE Id = @Id";
-
-    await using var cmd = dataSource.CreateCommand(updateQuery);
-    cmd.Parameters.Add(new NpgsqlParameter("FoodItemIds", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Integer)
-    {
-        Value = dto.FoodItemIds ?? Array.Empty<int>()
-    });
-
-    cmd.Parameters.AddWithValue("@FoodTypeId", dto.FoodTypeId); // Handle the new FoodTypeId
-
-    DateTime? parsedReminder = null;
-    if (!string.IsNullOrEmpty(dto.Reminder) && DateTime.TryParse(dto.Reminder, out DateTime reminder))
-    {
-        parsedReminder = reminder;
+        mealItem.Reminder = null;
     }
 
-    cmd.Parameters.AddWithValue("@Reminder", parsedReminder.HasValue ? (object)parsedReminder.Value : DBNull.Value);
-    cmd.Parameters.AddWithValue("@Id", id);
-    var result = await cmd.ExecuteNonQueryAsync();
-
-    if (result == 0)
-        return Results.NotFound($"Meal item with id {id} not found");
-
+    await context.SaveChangesAsync();
     return Results.Ok("Meal item updated");
 });
 
-app.MapDelete("/delete-meal-item/{id}", async (int id) => {
-    string deleteQuery = "DELETE FROM MealItems WHERE Id = @Id";
 
-    await using var cmd = dataSource.CreateCommand(deleteQuery);
-    cmd.Parameters.AddWithValue("@Id", id);
-    var result = await cmd.ExecuteNonQueryAsync();
 
-    if (result == 0)
+app.MapDelete("/delete-meal-item/{id}", async (int id, AppDbContext context) =>
+{
+    var mealItem = await context.MealItems.FindAsync(id);
+    if (mealItem == null)
         return Results.NotFound($"Meal item with id {id} not found");
 
+    context.MealItems.Remove(mealItem);
+    await context.SaveChangesAsync();
     return Results.Ok($"Meal item with id {id} has been deleted");
 });
 
-app.MapGet("/get-food-items/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodItems WHERE Id = @Id"))
-    {
-        cmd.Parameters.AddWithValue("@Id", id);
+app.MapGet("/get-food-items/{id}", async (int id, AppDbContext context) =>
+{
+    var foodItem = await context.FoodItems.FindAsync(id);
+    if (foodItem == null)
+        return Results.NotFound($"Food item with id {id} not found");
 
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            var foodItem = new FoodItem
-            {
-                Id = reader.GetInt32(0),
-                Name = reader.IsDBNull(1) ? null : reader.GetString(1),
-                ImageUrl = reader.IsDBNull(2) ? null : reader.GetString(2),
-                FoodType = reader.GetInt32(3),
-                Fat = reader.GetDouble(4),
-                Carbohydrates = reader.GetDouble(5),
-                Sugar = reader.GetDouble(6),
-                Cholesterol = reader.GetDouble(7)
-            };
-            return Results.Ok(foodItem);
-        }
-    }
-    return Results.NotFound($"Food item with id {id} not found");
+    return Results.Ok(foodItem);
 });
 
-app.MapGet("/get-food-types", async () => {
-    List<FoodTypes> foodTypes = [];
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodTypes"))
-    await using (var reader = await cmd.ExecuteReaderAsync())
-    {
-        while (await reader.ReadAsync())
-        {
-            foodTypes.Add(new FoodTypes
-            {
-                Id = reader.GetInt32(0),
-                Name = reader.GetString(1),
-                Description = reader.IsDBNull(2) ? null : reader.GetString(2)
-            });
-        }
-    }
+app.MapGet("/get-food-types", async (AppDbContext context) =>
+{
+    var foodTypes = await context.FoodTypes.ToListAsync();
     return Results.Ok(foodTypes);
 });
 
-app.MapGet("/get-food-types/{id}", async (int id) => {
-    await using (var cmd = dataSource.CreateCommand("SELECT * FROM FoodTypes WHERE Id = @Id"))
-    {
-        cmd.Parameters.AddWithValue("@Id", id);
+app.MapGet("/get-food-types/{id}", async (int id, AppDbContext context) =>
+{
+    var foodType = await context.FoodTypes.FindAsync(id);
+    if (foodType == null)
+        return Results.NotFound($"Food type with id {id} not found");
 
-        await using var reader = await cmd.ExecuteReaderAsync();
-        if (await reader.ReadAsync())
-        {
-            var foodItem = new FoodTypes
-            {
-                Id = reader.GetInt32(0),
-                Name = reader.GetString(1),
-                Description = reader.IsDBNull(2) ? null : reader.GetString(2)
-            };
-            return Results.Ok(foodItem);
-        }
-    }
-    return Results.NotFound($"Food item with id {id} not found");
+    return Results.Ok(foodType);
 });
 
-app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem) => {
-    var updateQuery = @"
-        UPDATE FoodItems SET
-        Name = @Name,
-        ImageUrl = @ImageUrl,
-        FoodType = @FoodType,
-        Fat = @Fat,
-        Carbohydrates = @Carbohydrates,
-        Sugar = @Sugar,
-        Cholesterol = @Cholesterol
-        WHERE Id = @Id";
-
-    await using var cmd = dataSource.CreateCommand(updateQuery);
-    cmd.Parameters.AddWithValue("@Name", updatedFoodItem.Name);
-    cmd.Parameters.AddWithValue("@ImageUrl", updatedFoodItem.ImageUrl);
-    cmd.Parameters.AddWithValue("@FoodType", (int)updatedFoodItem.FoodType);
-    cmd.Parameters.AddWithValue("@Fat", updatedFoodItem.Fat);
-    cmd.Parameters.AddWithValue("@Carbohydrates", updatedFoodItem.Carbohydrates);
-    cmd.Parameters.AddWithValue("@Sugar", updatedFoodItem.Sugar);
-    cmd.Parameters.AddWithValue("@Cholesterol", updatedFoodItem.Cholesterol);
-    cmd.Parameters.AddWithValue("@Id", id);
-
-    var result = await cmd.ExecuteNonQueryAsync();
-    if (result == 0)
+app.MapPut("/update-food/{id}", async (int id, FoodItem updatedFoodItem, AppDbContext context) =>
+{
+    var foodItem = await context.FoodItems.FindAsync(id);
+    if (foodItem == null)
         return Results.NotFound($"Food item with id {id} not found");
 
+    foodItem.Name = updatedFoodItem.Name;
+    foodItem.ImageUrl = updatedFoodItem.ImageUrl;
+    foodItem.FoodType = updatedFoodItem.FoodType;
+    foodItem.Fat = updatedFoodItem.Fat;
+    foodItem.Carbohydrates = updatedFoodItem.Carbohydrates;
+    foodItem.Sugar = updatedFoodItem.Sugar;
+    foodItem.Cholesterol = updatedFoodItem.Cholesterol;
+
+    await context.SaveChangesAsync();
     return Results.Ok(updatedFoodItem);
 });
 
-app.MapDelete("/delete-food/{id}", async (int id) => {
-    var deleteQuery = "DELETE FROM FoodItems WHERE Id = @Id";
-
-    await using var cmd = dataSource.CreateCommand(deleteQuery);
-    cmd.Parameters.AddWithValue("@Id", id);
-    var result = await cmd.ExecuteNonQueryAsync();
-
-    if (result == 0)
+app.MapDelete("/delete-food/{id}", async (int id, AppDbContext context) =>
+{
+    var foodItem = await context.FoodItems.FindAsync(id);
+    if (foodItem == null)
         return Results.NotFound($"Food item with id {id} not found");
 
+    context.FoodItems.Remove(foodItem);
+    await context.SaveChangesAsync();
     return Results.Ok($"Food item with id {id} has been deleted");
 });
 
-app.MapGet("/calculate-rating/{id}", async (int id) => {
-    var cmd = dataSource.CreateCommand($"SELECT * FROM FoodItems WHERE Id = {id}");
-    await using (var reader = await cmd.ExecuteReaderAsync())
-    {
-        if (await reader.ReadAsync())
-        {
-            var fat = reader.GetDouble(4);
-            var carbohydrates = reader.GetDouble(5);
-            var sugar = reader.GetDouble(6);
-            var cholesterol = reader.GetDouble(7);
+app.MapGet("/calculate-rating/{id}", async (int id, AppDbContext context) =>
+{
+    var foodItem = await context.FoodItems.FindAsync(id);
+    if (foodItem == null)
+        return Results.NotFound($"Food item with id {id} not found");
 
-            var rating = (fat + carbohydrates + sugar + cholesterol) / 4;
+    var rating = (foodItem.Fat + foodItem.Carbohydrates + foodItem.Sugar + foodItem.Cholesterol) / 4;
+    rating = Math.Max(0, Math.Min(100, rating));
 
-            rating = Math.Max(0, Math.Min(100, rating));
-
-            return Results.Ok(new { Rating = rating });
-        }
-    }
-
-    return Results.NotFound($"Food item with id {id} not found");
+    return Results.Ok(new { Rating = rating });
 });
 
 app.Run();

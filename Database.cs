@@ -1,7 +1,9 @@
 using Npgsql;
 
-namespace DataSourceFactory {
-    public static class DatabaseConnectionRepository {
+namespace DataSourceFactory
+{
+    public static class DatabaseConnectionRepository
+    {
         public static NpgsqlDataSource GetDataSource(WebApplicationBuilder builder)
         {
             var connectionString = builder.Configuration["pgConnection"];
